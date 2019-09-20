@@ -47,11 +47,6 @@ private:
     loadData* ld;
     computeView* compView;
 
-    int frame_num;                              // current frame
-    int cur_view;                               // current view
-    int cur_camera;                             // current camera
-
-    int cam_ref[2];                             //reference camera
     cv::Mat viewSynthesisImage;                 //synthesis image
 
 private slots:

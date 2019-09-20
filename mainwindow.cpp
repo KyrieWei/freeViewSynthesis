@@ -45,7 +45,14 @@ MainWindow::MainWindow(QWidget *parent) :
     displayWin->setFixedSize(960, 600);
     displayWin->move(50,50);
 
-    cv::Mat img = cv::imread("F:\\wei\\freeViewProject\\test_pic_video\\ballet-dancer\\MSR3DVideo-Ballet\\cam3\\color-cam3-f000.jpg");
+
+    ld = new loadData();
+    compView = new computeView();
+
+    char tmp[20];
+    sprintf(tmp, "color-cam%d-f%03d.jpg", ld->cur_camera, ld->frame_num);
+    string frame_name = ld->path_arr[ld->cur_camera] + tmp;
+    cv::Mat img = cv::imread(frame_name);
     QImage image;
     image = MatToQImage(img);
     displayWin->clear();
@@ -56,12 +63,8 @@ MainWindow::MainWindow(QWidget *parent) :
     timer->setInterval(50);
 
     play_status = false;
-    frame_num = 0;
-    cur_camera = 4;
-    cur_view = (cur_camera-1)*4 + 1;
-    ld = new loadData();
-    compView = new computeView();
-    ld->get_view_setting("F:\\wei\\freeViewProject\\test_pic_video\\ballet-dancer\\MSR3DVideo-Ballet\\calibParams-ballet.txt");
+
+    ld->get_view_setting(ld->calibParams_path);
     ld->get_allView_calibParams();
     compView->set_ld(ld);
 }
@@ -74,25 +77,25 @@ void MainWindow::up_btn_clicked()
 void MainWindow::left_btn_clicked()
 {
     timer->stop();
-    cur_view += 1;
-    cout << cur_view << endl;
-    if(cur_view > ld->view_num)
+    ld->cur_view += 1;
+    cout <<"current view id: " << ld->cur_view << endl;
+    if(ld->cur_view == ld->view_num)
     {
         QMessageBox::information(this, "warning", "boundary reached!");
-        cur_view = ld->view_num;
+        ld->cur_view = ld->view_num - 1;
     }
     else
     {
-        ld->get_ref_camera(cur_view, cam_ref);
-        cout << cam_ref[0] << " " << cam_ref[1] << endl;
-        ld->get_frame_imgArr(frame_num, cam_ref[0], cam_ref[1]);
-        ld->get_frame_depArr(frame_num, cam_ref[0], cam_ref[1]);
-        if(cam_ref[0] == cam_ref[1])
+        ld->get_ref_camera(ld->cur_view);
+        cout << "left camera id: " << ld->refIdx_in_cam_arr[0] << "  right camera id: " << ld->refIdx_in_cam_arr[1] << endl;
+        ld->get_frame_imgArr(ld->frame_num, ld->refIdx_in_cam_arr[0], ld->refIdx_in_cam_arr[1]);
+        ld->get_frame_depArr(ld->frame_num, ld->refIdx_in_cam_arr[0], ld->refIdx_in_cam_arr[1]);
+
+        if(ld->refIdx_in_cam_arr[0] == ld->refIdx_in_cam_arr[1])
             viewSynthesisImage = ld->frame_imgArr[0];
         else
-        {
-            viewSynthesisImage = compView->viewSynthesis(cur_view);
-        }
+            viewSynthesisImage = compView->viewSynthesis(ld->cur_view);
+
         QImage image;
         image = MatToQImage(viewSynthesisImage);
         displayWin->setPixmap(QPixmap::fromImage(image));
@@ -103,25 +106,22 @@ void MainWindow::left_btn_clicked()
 void MainWindow::right_btn_clicked()
 {
     timer->stop();
-    cur_view -= 1;
-    if(cur_view < 1)
+    ld->cur_view -= 1;
+    if(ld->cur_view < 0)
     {
         QMessageBox::information(this, "warning", "boundary reached!");
-        cur_view = 1;
+        ld->cur_view = 0;
     }
     else
     {
-        ld->get_ref_camera(cur_view, cam_ref);
-        ld->get_frame_imgArr(frame_num, cam_ref[0], cam_ref[1]);
-        ld->get_frame_depArr(frame_num, cam_ref[0], cam_ref[1]);
-        if(cam_ref[0] == cam_ref[1])
-        {
+        ld->get_ref_camera(ld->cur_view);
+        ld->get_frame_imgArr(ld->frame_num, ld->refIdx_in_cam_arr[0], ld->refIdx_in_cam_arr[1]);
+        ld->get_frame_depArr(ld->frame_num, ld->refIdx_in_cam_arr[0], ld->refIdx_in_cam_arr[1]);
+
+        if(ld->refIdx_in_cam_arr[0] == ld->refIdx_in_cam_arr[1])
             viewSynthesisImage = ld->frame_imgArr[0];
-        }
         else
-        {
-            viewSynthesisImage = compView->viewSynthesis(cur_view);
-        }
+            viewSynthesisImage = compView->viewSynthesis(ld->cur_view);
 
         QImage image;
         image = MatToQImage(viewSynthesisImage);
@@ -146,11 +146,11 @@ void MainWindow::DisplayImage()
             timer->stop();
             image = cv::imread("F:\\wei\\freeViewProject\\test_pic_video\\ballet-dancer\\MSR3DVideo-Ballet\\cam3\\color-cam3-f000.jpg");
             play_status = false;
-            frame_num = 0;
+            ld->frame_num = 0;
     }
     img = MatToQImage(image);
     displayWin->setPixmap(QPixmap::fromImage(img));
-    frame_num ++;
+    ld->frame_num ++;
 }
 
 void MainWindow::play_btn_clicked()

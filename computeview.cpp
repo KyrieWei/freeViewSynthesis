@@ -10,11 +10,6 @@ void computeView::set_ld(loadData *ld)
     this->ld = ld;
 }
 
-void computeView::computeProjectionMatrices()
-{
-
-}
-
 double computeView::DepthLevelToZ(unsigned char d)
 {
     double z;
@@ -79,26 +74,25 @@ double computeView::projXYZtoUV(double projMatrix[4][4], double x, double y, dou
     return w;
 }
 
-void computeView::pointProject_from_ref_to_otherView(int ref_id, int u, int v, unsigned char d)
+void computeView::pointProject_from_ref_to_otherView(int ref_id, int proj, int u, int v, unsigned char d)
 {
     double x, y, z = DepthLevelToZ(d);
 
     projUVZtoXY(ld->allView_CalibParams[ref_id].m_ProjMatrix, (double)u, (double)v, z, &x, &y);
-
     double *pt = ld->pts;
-    pt[2] = projXYZtoUV(ld->allView_CalibParams[ref_id].m_ProjMatrix, x, y, z, &pt[0], &pt[1]);
+    pt[2] = projXYZtoUV(ld->allView_CalibParams[proj].m_ProjMatrix, x, y, z, &pt[0], &pt[1]);
     pt[2] = ZToDepthLevel(pt[2]);
 
 }
 
-void computeView::warpingImage(int ref, int ref_id, int proj, cv::Mat &imageColorOut, cv::Mat &imageDepthOut)
+void computeView::warpingImage(int ref,int ref_id, int proj, cv::Mat &imageColorOut, cv::Mat &imageDepthOut)
 {
     for (int v = 0; v < ld->frame_imgArr[ref].rows; v++)
         for (int u = 0; u < ld->frame_imgArr[ref].cols; u++)
         {
             double d = ld->frame_depArr[ref].at<cv::Vec3b>(v, u)[0];
 
-            pointProject_from_ref_to_otherView(ref_id, u, v, d);
+            pointProject_from_ref_to_otherView(ref_id, proj, u, v, d);
             int u1 = (int)ld->pts[0];
             int v1 = (int)ld->pts[1];
             int k1 = (int)ld->pts[2];
@@ -139,11 +133,14 @@ cv::Mat computeView::viewSynthesis(int cur_view)
             imageDepthOut.at<cv::Vec3b>(v, u)[2] = 0;
         }
     }
-    int cam_ref[2];
-    ld->get_ref_cameraID_in_all_views(cur_view, cam_ref);
-    cout << cam_ref[0] << " " << cam_ref[1] << endl;
-    warpingImage(0, cam_ref[0], cur_view, imageColorOut, imageDepthOut);
-    warpingImage(1, cam_ref[1], cur_view, imageColorOut, imageDepthOut);
+
+    ld->get_ref_cameraID_in_all_views(cur_view);
+    cout << "left camera in view arr index: " << ld->refIdx_in_view_arr[0] << endl;
+    cout << "right camera in view arr index:  " << ld->refIdx_in_view_arr[1] << endl;
+
+    warpingImage(0, ld->refIdx_in_view_arr[0], cur_view, imageColorOut, imageDepthOut);
+    cout << endl;
+    warpingImage(1, ld->refIdx_in_view_arr[1], cur_view, imageColorOut, imageDepthOut);
 
     cv::medianBlur(imageColorOut, imageColorOut, 3);
     cv::medianBlur(imageDepthOut, imageDepthOut, 3);

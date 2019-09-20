@@ -3,19 +3,22 @@
 loadData::loadData()
 {
     camera_num = 8;
-    view_num = (camera_num-1)*4 + 1;
+    vir_num = 3;
+    view_num = (camera_num-1)*(vir_num+1) + 1;
+
+    cur_camera = 3;
+    cur_view = cur_camera*(vir_num + 1);
+    frame_num = 0;
 
     basePath = "F:\\wei\\freeViewProject\\test_pic_video\\ballet-dancer\\MSR3DVideo-Ballet\\";
-
-    cameraID = new int[camera_num];
-    viewID = new int[view_num];
+    calibParams_path = "F:\\wei\\freeViewProject\\test_pic_video\\ballet-dancer\\MSR3DVideo-Ballet\\calibParams-ballet.txt";
 
     path_arr = new string[camera_num];
     frame_imgArr = new cv::Mat[2];
     frame_depArr = new cv::Mat[2];
     m_CalibParams = new CalibStruct[camera_num];
     allView_CalibParams = new CalibStruct[view_num + camera_num];
-    curView_CalibParams = new CalibStruct();
+
     pts = new double[3];
 
     height = 768;
@@ -24,21 +27,12 @@ loadData::loadData()
     MinZ = 42.0;
 
     for(int i = 0; i < camera_num; i ++)
-    {
-        cameraID[i] = i;
         path_arr[i] = basePath + "cam" + char('0'+i) + "\\";
-    }
-
-    for(int i = 0; i < view_num; i ++)
-        viewID[i] = i;
-
 }
 
 void loadData::get_frame_imgArr(int frame_num, int left_cam, int right_cam)
 {
     char tmp[20];
-    left_cam --;
-    right_cam --;
     sprintf(tmp, "color-cam%d-f%03d.jpg", left_cam, frame_num);
     string frame_name = path_arr[left_cam] + tmp;
     cout << frame_name << endl;
@@ -56,8 +50,6 @@ void loadData::get_frame_imgArr(int frame_num, int left_cam, int right_cam)
 void loadData::get_frame_depArr(int frame_num, int left_cam, int right_cam)
 {
     char tmp[20];
-    left_cam --;
-    right_cam --;
     sprintf(tmp, "depth-cam%d-f%03d.png", left_cam, frame_num);
     string frame_name= path_arr[left_cam] + tmp;
     cout << frame_name << endl;
@@ -114,33 +106,35 @@ void loadData::get_view_setting(char* path)
 /*
  * caculate camera indexs in camera array
  */
-void loadData::get_ref_camera(int cur_view, int cam_ref[])
+void loadData::get_ref_camera(int cur_view)
 {
-    if(cur_view % 4 == 1)
+    if(cur_view % (vir_num + 1) == 0)           //cur_view is at the camera position
     {
-        cam_ref[0] = cur_view / 4 + 1;
-        cam_ref[1] = cur_view / 4 + 1;
+        refIdx_in_cam_arr[0] = cur_view / (vir_num + 1);
+        refIdx_in_cam_arr[1] = cur_view / (vir_num + 1);
     }
-    else if(cur_view % 4 == 0)
+    else                                        //cur_view is between two cameras
     {
-        cam_ref[0] = cur_view / 4;
-        cam_ref[1] = cur_view / 4 + 1;
-    }
-    else
-    {
-        cam_ref[0] = cur_view / 4 + 1;
-        cam_ref[1] = cur_view / 4 + 2;
+        refIdx_in_cam_arr[0] = cur_view / (vir_num + 1);
+        refIdx_in_cam_arr[1] = cur_view / (vir_num + 1) + 1;
     }
 }
 
 /*
  * caculate camera indexs in all views array
  */
-void loadData::get_ref_cameraID_in_all_views(int cur_view, int cam_ref[])
+void loadData::get_ref_cameraID_in_all_views(int cur_view)      //cur_view is at the camera position
 {
-    cur_view --;
-    cam_ref[0] = cur_view - (cur_view % 4);
-    cam_ref[1] = cam_ref[0] + 4;
+    if(cur_view % (vir_num + 1) == 0)
+    {
+        refIdx_in_view_arr[0] = cur_view;
+        refIdx_in_view_arr[1] = cur_view;
+    }
+    else                                                        //cur_view is between two cameras
+    {
+        refIdx_in_view_arr[0] = cur_view - cur_view % (vir_num + 1);
+        refIdx_in_view_arr[1] = refIdx_in_view_arr[0] + vir_num + 1;
+    }
 }
 
 /*
@@ -153,33 +147,34 @@ void loadData::get_allView_calibParams()
     double exMat[3][4];
     for(viewIdx = 0; viewIdx < view_num; viewIdx ++)
     {
-        k = viewIdx % 4;
-        cam_ref[0] = viewIdx / 4;
-        cam_ref[1] = viewIdx / 4 + 1;
-        if(cam_ref[1] == camera_num) // arr beyond boundary
+        cout << viewIdx << endl;
+        k = viewIdx % (vir_num + 1);
+        cam_ref[0] = viewIdx / (vir_num + 1);
+        cam_ref[1] = viewIdx / (vir_num + 1) + 1;
+        if(cam_ref[1] == camera_num)            //beyond camera index boundary
             cam_ref[1] = cam_ref[0];
 
         for (int i = 0; i < 3; i++)
         {
             for (int j = 0; j < 3; j++)
             {
-                allView_CalibParams[viewIdx].m_K[i][j] = m_CalibParams[cam_ref[0]].m_K[i][j] + 1.0 * (m_CalibParams[cam_ref[1]].m_K[i][j] - m_CalibParams[cam_ref[0]].m_K[i][j]) / 4 * k;
-                std::cout << allView_CalibParams[viewIdx].m_K[i][j] << "\t";
+                allView_CalibParams[viewIdx].m_K[i][j] = m_CalibParams[cam_ref[0]].m_K[i][j] + 1.0 * (m_CalibParams[cam_ref[1]].m_K[i][j] - m_CalibParams[cam_ref[0]].m_K[i][j]) / (vir_num + 1) * k;
+                //std::cout << allView_CalibParams[viewIdx].m_K[i][j] << "\t";
             }
-            std::cout << std::endl;
+            //std::cout << std::endl;
         }
 
         for (int i = 0; i < 3; i++)
         {
             for (int j = 0; j < 3; j++)
             {
-                allView_CalibParams[viewIdx].m_Rotmatrix[i][j] = m_CalibParams[cam_ref[0]].m_Rotmatrix[i][j] + 1.0 * (m_CalibParams[cam_ref[1]].m_Rotmatrix[i][j] - m_CalibParams[cam_ref[0]].m_Rotmatrix[i][j]) / 4 * k;
-                std::cout << allView_CalibParams[viewIdx].m_Rotmatrix[i][j] << "\t";
+                allView_CalibParams[viewIdx].m_Rotmatrix[i][j] = m_CalibParams[cam_ref[0]].m_Rotmatrix[i][j] + 1.0 * (m_CalibParams[cam_ref[1]].m_Rotmatrix[i][j] - m_CalibParams[cam_ref[0]].m_Rotmatrix[i][j]) / (vir_num + 1) * k;
+                //std::cout << allView_CalibParams[viewIdx].m_Rotmatrix[i][j] << "\t";
             }
-            allView_CalibParams[viewIdx].m_Trans[i] = m_CalibParams[cam_ref[0]].m_Trans[i] + 1.0 * (m_CalibParams[cam_ref[1]].m_Trans[i] - m_CalibParams[cam_ref[0]].m_Trans[i]) / 4 * k;
-            std::cout << allView_CalibParams[viewIdx].m_Trans[i] << std::endl;
+            allView_CalibParams[viewIdx].m_Trans[i] = m_CalibParams[cam_ref[0]].m_Trans[i] + 1.0 * (m_CalibParams[cam_ref[1]].m_Trans[i] - m_CalibParams[cam_ref[0]].m_Trans[i]) / (vir_num + 1) * k;
+            //std::cout << allView_CalibParams[viewIdx].m_Trans[i] << std::endl;
         }
-        std::cout << std::endl;
+        //std::cout << std::endl;
 
         //caculate projectionMatrix
         inMat = allView_CalibParams[viewIdx].m_K;
@@ -204,6 +199,24 @@ void loadData::get_allView_calibParams()
         allView_CalibParams[viewIdx].m_ProjMatrix[3][1] = 0.0;
         allView_CalibParams[viewIdx].m_ProjMatrix[3][2] = 0.0;
         allView_CalibParams[viewIdx].m_ProjMatrix[3][3] = 1.0;
+
+        for (int j = 0; j < 3; j++) {
+            for (int k = 0; k < 3; k++)
+                std::cout << allView_CalibParams[viewIdx].m_K[j][k] << "\t";
+            std::cout << std::endl;
+        }
+
+        for (int j = 0; j < 3; j++) {
+            for (int k = 0; k < 3; k++)
+                std::cout << allView_CalibParams[viewIdx].m_Rotmatrix[j][k] << "\t";
+            std::cout << std::endl;
+        }
+        for (int k = 0; k < 3; k++)
+            std::cout << allView_CalibParams[viewIdx].m_Trans[k] << "\t";
+        std::cout << std::endl;
+        std::cout << std::endl;
+        std::cout << std::endl;
+        std::cout << std::endl;
     }
 }
 
